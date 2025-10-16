@@ -2,7 +2,7 @@ mod worlds;
 
 use worlds::medium::groupby_agg as groupby_agg_medium;
 use worlds::large::groupby_agg as groupby_agg_large;
-use worlds::util::{Record, GroupByResult};
+use worlds::util::Record;
 
 
 fn main() {
@@ -22,12 +22,10 @@ fn main() {
     ];
 
     println!("Running Medium world...");
-    let groups = groupby_agg_medium(&records, "count");
-    let result_medium = GroupByResult { raw: groups };
-    println!("Result: {:?}", result_medium.raw);
-    println!("Finalized = {:?}", result_medium.finalize());
+    let result_medium = groupby_agg_medium(&records, "avg");
+    println!("Result: {:?}", result_medium);
 
     println!("\nRunning Large world...");
-    let result_large = groupby_agg_large(&records, "sum");
+    let result_large = groupby_agg_large(&records, "avg");
     println!("Result: {:?}", result_large);
 }

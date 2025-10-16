@@ -1,12 +1,7 @@
 
 use rayon::prelude::*;
 use std::collections::HashMap;
-use super::util::{Record, get_agg_op, get_agg_id, get_reduce_op, AggState};
-
-pub fn groupby_agg(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
-    // Medium-world groupby agg
-    medium_world(records, &agg)
-}
+use super::util::{Record, AggState};
 
 pub fn medium_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
     records
@@ -32,4 +27,18 @@ pub fn medium_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
                 a
             },
         )
+}
+
+
+/// Wrapper for end-to-end groupby aggregation (medium world)
+pub fn groupby_agg(records: &[Record], agg: &str) -> HashMap<u64, f64> {
+    let groups = medium_world(records, agg);
+
+    // Finalize to scalar results
+    let mut result = HashMap::new();
+    for (k, state) in groups {
+        result.insert(k, state.finalize());
+    }
+
+    result
 }

@@ -1,25 +1,9 @@
-use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct Record {
     pub key: u64,
     pub value: f64,
 }
-
-//-----------GroupByResult-----------//
-#[derive(Clone, Debug)]
-pub struct GroupByResult {
-    pub raw: HashMap<u64, AggState>,
-}
-
-impl GroupByResult {
-    pub fn finalize(&self) -> HashMap<u64, f64> {
-        self.raw.iter()
-            .map(|(&k, v)| (k, v.finalize()))
-            .collect()
-    }
-}
-
 
 //--------------AggState--------------//
 #[derive(Clone, Debug)]
@@ -85,34 +69,5 @@ impl AggState {
             AggState::Avg { sum, count } => *sum / *count as f64,
             AggState::Count(v) => *v,
         }
-    }
-}
-
-
-// TODO: implement AVG
-pub fn get_agg_op(agg: &str) -> Box<dyn Fn(f64, f64) -> f64 + Send + Sync> {
-    // Returns operator closure for given agg op
-    match agg {
-        "min" => Box::new(|v, rval| v.min(rval)),
-        "max" => Box::new(|v, rval| v.max(rval)),
-        "count" => Box::new(|v, _| v + 1.0),
-        _ => Box::new(|v, rval| v + rval),
-    }
-}
-
-pub fn get_agg_id(agg: &str) -> Box<dyn Fn(f64) -> f64 + Send + Sync> {
-    // Returns identity value closure for given agg op
-    match agg {
-        "count" => Box::new(|_| 1.0),
-        _ => Box::new(|v| v),
-    }
-}
-
-pub fn get_reduce_op(agg: &str) -> Box<dyn Fn(f64, f64) -> f64 + Send + Sync> {
-    // Returns operator closure for given agg op
-    match agg {
-        "min" => Box::new(|v, rval| v.min(rval)),
-        "max" => Box::new(|v, rval| v.max(rval)),
-        _ => Box::new(|v, rval| v + rval),
     }
 }
