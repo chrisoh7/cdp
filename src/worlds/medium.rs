@@ -1,7 +1,7 @@
 
 use rayon::prelude::*;
 use std::collections::HashMap;
-use super::util::{Record, AggState};
+use super::types::{Record, AggState};
 
 pub fn medium_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
     records

@@ -1,7 +1,7 @@
 use rayon::prelude::*;
 use scc::HashMap as ConcurrentHashMap;
 use std::collections::HashMap;
-use super::util::{Record, AggState};
+use super::types::{Record, AggState};
 
 // Large world: single global concurrent hashmap, updated by all threads.
 pub fn large_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
