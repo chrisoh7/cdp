@@ -25,6 +25,17 @@ pub enum WorldType {
     Large,
 }
 
+#[derive(Clone, Debug)]
+pub struct MultiRecord {
+    pub keys: Vec<u64>,
+    pub values: Vec<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AggRowState {
+    pub states: Vec<AggState>,
+}
+
 //-------------------Type Implementation-------------------//
 
 impl AggState {
@@ -106,5 +117,57 @@ impl WorldType {
         };
 
         Ok(result)
+    }
+
+    pub fn groupby_multi(
+        &self,
+        keys: &[&str],
+        vals: &[&str],
+        aggs: &[&str],
+        path: &str,
+    ) -> parquet::errors::Result<HashMap<Vec<u64>, Vec<f64>>> {
+        // 1️. Read the Parquet file into Vec<MultiRecord>
+        let records = super::util::read_parquet_to_multirecords(path, keys, vals)?;
+        println!(
+            "Loaded {} records with {} keys and {} values",
+            records.len(),
+            keys.len(),
+            vals.len()
+        );
+
+        // 2️. Dispatch to the correct world implementation
+        let result = match self {
+            Self::Medium => super::medium::groupby_multi(&records, aggs),
+            _ => panic!("WorldType not implemented yet"),
+        };
+
+        Ok(result)
+    }
+}
+
+impl AggRowState {
+    pub fn new(aggs: &[&str], values: &[f64]) -> Self {
+        let states = aggs
+            .iter()
+            .zip(values.iter())
+            .map(|(agg, &val)| AggState::new_from_agg(agg, val))
+            .collect();
+        Self { states }
+    }
+
+    pub fn update(&mut self, values: &[f64]) {
+        for (state, &val) in self.states.iter_mut().zip(values.iter()) {
+            state.update(val);
+        }
+    }
+
+    pub fn merge(&mut self, other: AggRowState) {
+        for (s1, s2) in self.states.iter_mut().zip(other.states.into_iter()) {
+            s1.merge(s2);
+        }
+    }
+
+    pub fn finalize(&self) -> Vec<f64> {
+        self.states.iter().map(|s| s.finalize()).collect()
     }
 }

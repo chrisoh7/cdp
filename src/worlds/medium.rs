@@ -1,7 +1,7 @@
 
 use rayon::prelude::*;
 use std::collections::HashMap;
-use super::types::{Record, AggState};
+use super::types::{Record, AggState, AggRowState, MultiRecord};
 
 pub fn medium_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
     records
@@ -35,6 +35,47 @@ pub fn groupby_agg(records: &[Record], agg: &str) -> HashMap<u64, f64> {
     let groups = medium_world(records, agg);
 
     // Finalize to scalar results
+    let mut result = HashMap::new();
+    for (k, state) in groups {
+        result.insert(k, state.finalize());
+    }
+
+    result
+}
+
+
+pub fn medium_world_multi(records: &[MultiRecord], aggs: &[&str]) 
+    -> HashMap<Vec<u64>, AggRowState> {
+    records
+        .par_iter()
+        .fold(
+            || HashMap::<Vec<u64>, AggRowState>::new(),
+            |mut local, r| {
+                local
+                    .entry(r.keys.clone())
+                    .and_modify(|state| state.update(&r.values))
+                    .or_insert(AggRowState::new(aggs, &r.values));
+                local
+            },
+        )
+        .reduce(
+            || HashMap::new(),
+            |mut a, b| {
+                for (k, v) in b {
+                    a.entry(k)
+                        .and_modify(|state| state.merge(v.clone()))
+                        .or_insert(v);
+                }
+                a
+            },
+        )
+}
+
+pub fn groupby_multi(records: &[MultiRecord], aggs: &[&str]) 
+    -> HashMap<Vec<u64>, Vec<f64>> {
+    let groups = medium_world_multi(records, aggs);
+
+    // Finalize results into numeric vectors
     let mut result = HashMap::new();
     for (k, state) in groups {
         result.insert(k, state.finalize());
