@@ -1,3 +1,9 @@
+use arrow::array::Array;
+use std::fs::File;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use arrow::array::{Int64Array, Float64Array};
+use std::collections::HashMap;
+
 
 #[derive(Clone, Debug)]
 pub struct Record {
@@ -5,7 +11,6 @@ pub struct Record {
     pub value: f64,
 }
 
-//--------------AggState--------------//
 #[derive(Clone, Debug)]
 pub enum AggState {
     Sum(f64),
@@ -69,5 +74,121 @@ impl AggState {
             AggState::Avg { sum, count } => *sum / *count as f64,
             AggState::Count(v) => *v,
         }
+    }
+}
+
+pub fn read_parquet_to_records(path: &str, key_str: &str, val_str: &str) -> parquet::errors::Result<Vec<Record>> {
+    let file = File::open(path)?;
+    
+    // 1️. Create a RecordBatch reader directly
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let mut record_batch_reader = builder.build()?;
+
+    let mut records = Vec::new();
+
+    // 2️. Iterate over RecordBatches
+    while let Some(batch_result) = record_batch_reader.next() {
+        let batch = batch_result?;
+        let schema = batch.schema();
+
+        let key_idx = schema.index_of(key_str).unwrap();
+        let val_idx = schema.index_of(val_str).unwrap();
+
+        let key_array = batch
+            .column(key_idx)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        let val_array = batch
+            .column(val_idx)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+
+        for i in 0..batch.num_rows() {
+            if key_array.is_null(i) || val_array.is_null(i) {
+                continue;
+            }
+            records.push(Record {
+                key: key_array.value(i) as u64,
+                value: val_array.value(i),
+            });
+        }
+    }
+
+    Ok(records)
+}
+
+// Special case for COUNT(*)
+pub fn read_parquet_single_column(path: &str, key_str: &str) -> parquet::errors::Result<Vec<Record>> {
+    let file = File::open(path)?;
+    
+    // 1️. Create a RecordBatch reader directly
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let mut record_batch_reader = builder.build()?;
+
+    let mut records = Vec::new();
+
+    // 2️. Iterate over RecordBatches
+    while let Some(batch_result) = record_batch_reader.next() {
+        let batch = batch_result?;
+        let schema = batch.schema();
+
+        let key_idx = schema.index_of(key_str).unwrap();
+
+        let key_array = batch
+            .column(key_idx)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+
+        for i in 0..batch.num_rows() {
+            if key_array.is_null(i) {
+                continue;
+            }
+            records.push(Record {
+                key: key_array.value(i) as u64,
+                value: 1.0,
+            });
+        }
+    }
+
+    Ok(records)
+}
+
+#[derive(Clone, Debug)]
+pub enum WorldType {
+    Small, 
+    Medium, 
+    Large,
+}
+
+impl WorldType {
+    pub fn groupby(
+        &self,
+        key: &str,
+        val: &str,
+        agg: &str,
+        path: &str,
+    ) -> parquet::errors::Result<HashMap<u64, f64>> {
+        if agg == "count" {
+            let records = read_parquet_single_column(path, key)?;
+            println!("Loaded {} records", records.len());
+        }
+        let records = match agg {
+            "count" => read_parquet_single_column(path, key)?,
+            _ => read_parquet_to_records(path, key, val)?,
+        };
+        // let records = read_parquet_to_records(path, key, val)?;
+        println!("Loaded {} records", records.len());
+
+        let result = match self {
+            // Self::Small => super::small::groupby_agg(&records, agg),
+            Self::Medium => super::medium::groupby_agg(&records, agg),
+            Self::Large => super::large::groupby_agg(&records, agg),
+            _ => panic!("WorldType not implemented yet"),
+        };
+
+        Ok(result)
     }
 }

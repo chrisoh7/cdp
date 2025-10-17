@@ -1,31 +1,16 @@
 mod worlds;
 
-use worlds::medium::groupby_agg as groupby_agg_medium;
-use worlds::large::groupby_agg as groupby_agg_large;
-use worlds::util::Record;
+use worlds::util::{Record, WorldType};
+use crate::worlds::util::read_parquet_to_records;
 
+fn main() -> parquet::errors::Result<()> {
+    let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
 
-fn main() {
-    let records = vec![
-        Record { key: 1, value: 10.0 },
-        Record { key: 2, value: 20.0 },
-        Record { key: 1, value: 5.0 },
-        Record { key: 3, value: 7.5 },
-        Record { key: 2, value: 2.5 },
-        Record { key: 1, value: 4.0 },
-        Record { key: 1, value: 10.0 },
-        Record { key: 2, value: 20.0 },
-        Record { key: 1, value: 5.0 },
-        Record { key: 3, value: 7.5 },
-        Record { key: 2, value: 2.5 },
-        Record { key: 1, value: 4.0 },
-    ];
+    let result_q1 = WorldType::Medium.groupby("passenger_count", "*", "count", path)?;
+    println!("Q1 Result: {:?}", result_q1);
 
-    println!("Running Medium world...");
-    let result_medium = groupby_agg_medium(&records, "avg");
-    println!("Result: {:?}", result_medium);
+    let result_q2 = WorldType::Medium.groupby("passenger_count", "total_amount", "avg", path)?;
+    println!("Q2 Result: {:?}", result_q2);
 
-    println!("\nRunning Large world...");
-    let result_large = groupby_agg_large(&records, "avg");
-    println!("Result: {:?}", result_large);
+    Ok(())
 }
