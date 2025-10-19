@@ -85,6 +85,7 @@ impl AggState {
 }
 
 impl WorldType {
+    // TODO: rename to groupby_from_table
     pub fn groupby(
         &self,
         key: &str,
@@ -106,5 +107,13 @@ impl WorldType {
         };
 
         Ok(result)
+    }
+    
+    pub fn groupby_in_memory(&self, records: &[Record], agg: &str) -> anyhow::Result<std::collections::HashMap<u64, f64>> {
+        match self {
+            Self::Medium => Ok(super::medium::groupby_agg(&records, agg)),
+            Self::Large => Ok(super::large::groupby_agg(&records, agg)),
+            _ => unimplemented!(),
+        }
     }
 }

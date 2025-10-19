@@ -9,6 +9,11 @@ fn main() -> parquet::errors::Result<()> {
     let result_q1 = WorldType::Medium
         .groupby("passenger_count", "*", "count", path)?;
     println!("Q1 Result: {:?}", result_q1);
+
+    let result_q1 = WorldType::Large
+        .groupby("passenger_count", "*", "count", path)?;
+    println!("Q1 Result: {:?}", result_q1);
+    
     
     // Q2: SELECT passenger_count, avg(total_amount) FROM trips_mergetree GROUP BY passenger_count;
     let result_q2 = WorldType::Medium
