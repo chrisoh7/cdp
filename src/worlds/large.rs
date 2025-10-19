@@ -14,7 +14,7 @@ pub fn large_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
             .and_modify(|state| {
                 state.update(r.value);
             })
-            .or_insert_with(|| AggState::new_from_agg(agg, r.value));
+            .or_insert_with(|| AggState::init(agg, r.value));
     });
 
     // Snapshot into a standard HashMap using iter_sync

@@ -13,7 +13,7 @@ fn compare_with_duckdb(
 ) -> Result<()> {
     
     // CDP implementation
-    let my_result = world.groupby(key, val, agg, path)?;
+    let my_result = world.groupby_agg_from_path(key, val, agg, path)?;
 
     // Set up in-memory DuckDB
     let conn = duckdb::Connection::open_in_memory()?;

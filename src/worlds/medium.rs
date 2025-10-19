@@ -12,7 +12,7 @@ pub fn medium_world(records: &[Record], agg: &str) -> HashMap<u64, AggState> {
                 local
                     .entry(r.key)
                     .and_modify(|state| state.update(r.value))
-                    .or_insert(AggState::new_from_agg(agg, r.value));
+                    .or_insert(AggState::init(agg, r.value));
                 local
             },
         )

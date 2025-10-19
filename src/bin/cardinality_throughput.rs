@@ -72,7 +72,7 @@ fn main() -> Result<()> {
 
             // Time the group-by
             let start = Instant::now();
-            let _result = world.groupby_in_memory(&records, &agg)?;
+            let _ = world.groupby_agg(&records, &agg);
             let elapsed = start.elapsed().as_secs_f64();
 
             let throughput = num_records as f64 / elapsed;

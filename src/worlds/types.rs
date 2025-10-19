@@ -29,7 +29,7 @@ pub enum WorldType {
 
 impl AggState {
     // Create an initial state from a value and aggregation type
-    pub fn new_from_agg(agg: &str, value: f64) -> Self {
+    pub fn init(agg: &str, value: f64) -> Self {
         match agg {
             "sum" => AggState::Sum(value),
             "min" => AggState::Min(value),
@@ -85,8 +85,7 @@ impl AggState {
 }
 
 impl WorldType {
-    // TODO: rename to groupby_from_table
-    pub fn groupby(
+    pub fn groupby_agg_from_path(
         &self,
         key: &str,
         val: &str,
@@ -99,20 +98,13 @@ impl WorldType {
         };
         println!("Loaded {} records", records.len());
 
-        let result = match self {
-            // Self::Small => super::small::groupby_agg(&records, agg),
-            Self::Medium => super::medium::groupby_agg(&records, agg),
-            Self::Large => super::large::groupby_agg(&records, agg),
-            _ => panic!("WorldType not implemented yet"),
-        };
-
-        Ok(result)
+        Ok(self.groupby_agg(&records, agg))
     }
     
-    pub fn groupby_in_memory(&self, records: &[Record], agg: &str) -> anyhow::Result<std::collections::HashMap<u64, f64>> {
+    pub fn groupby_agg(&self, records: &[Record], agg: &str) -> HashMap<u64, f64> {
         match self {
-            Self::Medium => Ok(super::medium::groupby_agg(&records, agg)),
-            Self::Large => Ok(super::large::groupby_agg(&records, agg)),
+            Self::Medium => super::medium::groupby_agg(&records, agg),
+            Self::Large => super::large::groupby_agg(&records, agg),
             _ => unimplemented!(),
         }
     }

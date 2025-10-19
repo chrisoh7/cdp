@@ -1,8 +1,42 @@
 use arrow::array::Array;
 use std::fs::File;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use arrow::array::{Int64Array, Float64Array};
+use arrow::array::*;
 use super::types::Record;
+use arrow::datatypes::DataType;
+use arrow::compute::cast;
+use std::sync::Arc;
+use parquet::errors::ParquetError;
+
+/// Normalize an Arrow column to the given target type, if needed.
+/// Returns an `Arc<dyn Array>` of that target type.
+pub fn normalize_column(
+    arr: &Arc<dyn Array>,
+    target: &DataType,
+) -> Result<Arc<dyn Array>, ParquetError> {
+    let current = arr.data_type();
+
+    if current == target {
+        return Ok(Arc::clone(arr));
+    }
+
+    match (current, target) {
+        // allow safe numeric promotions (e.g., Float64 -> Int64, UInt64 -> Int64)
+        (DataType::Float64, DataType::Int64)
+        | (DataType::UInt64, DataType::Int64)
+        | (DataType::Int64, DataType::Float64)
+        | (DataType::UInt64, DataType::Float64)
+        | (DataType::Int32, DataType::Float64)
+        | (DataType::UInt32, DataType::Float64) => {
+            cast(arr, target).map_err(|e| ParquetError::General(format!("cast error: {}", e)))
+        }
+
+        _ => Err(ParquetError::General(format!(
+            "Unsupported cast: {:?} -> {:?}",
+            current, target
+        ))),
+    }
+}
 
 
 pub fn read_parquet_to_records(path: &str, key_str: &str, val_str: &str) -> parquet::errors::Result<Vec<Record>> {
@@ -22,16 +56,21 @@ pub fn read_parquet_to_records(path: &str, key_str: &str, val_str: &str) -> parq
         let key_idx = schema.index_of(key_str).unwrap();
         let val_idx = schema.index_of(val_str).unwrap();
 
-        let key_array = batch
-            .column(key_idx)
+        // Normalize key
+        let key_col = batch.column(key_idx);
+        let normalized_keys = normalize_column(key_col, &DataType::Int64)?;
+        let key_array = normalized_keys
             .as_any()
             .downcast_ref::<Int64Array>()
-            .unwrap();
-        let val_array = batch
-            .column(val_idx)
+            .expect("normalized_keys should be Int64Array");
+
+        // Normalize value
+        let val_col = batch.column(val_idx);
+        let normalized_vals = normalize_column(val_col, &DataType::Float64)?;
+        let val_array = normalized_vals
             .as_any()
             .downcast_ref::<Float64Array>()
-            .unwrap();
+            .expect("normalized_vals should be Float64Array");
 
         for i in 0..batch.num_rows() {
             if key_array.is_null(i) || val_array.is_null(i) {
