@@ -41,4 +41,4 @@ pub enum WorldType {
 `WorldType` represents which solution among the three worlds to run. It implements `groupby_agg_from_path` and `groupby_agg`, which does an internal pattern matching to call the correct version of groupby agg.  
 
 ## Testing Infrastructure
-We test for correctness by comparing our groupby agg result with DuckDB's. In `\tests\test_compare_duckdb.rs`, the `compare_with_duckdb` module runs the specified query on the CDP implementation and DuckDB's query executor, casts both results into the same type, and does per-entry comparison. Run `cargo test` to run the unit tests. 
+We test for correctness by comparing our groupby agg result with DuckDB's. In `/tests/test_compare_duckdb.rs`, the `compare_with_duckdb` module runs the specified query on the CDP implementation and DuckDB's query executor, casts both results into the same type, and does per-entry comparison. Run `cargo test` to run the unit tests. 
