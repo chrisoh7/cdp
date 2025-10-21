@@ -25,6 +25,12 @@ pub enum WorldType {
     Large,
 }
 
+pub struct TimedResult {
+    pub result: HashMap<u64, f64>,
+    pub t_update: f64,
+    pub t_finalize: f64,
+}
+
 //-------------------Type Implementation-------------------//
 
 impl AggState {
@@ -105,6 +111,14 @@ impl WorldType {
         match self {
             Self::Medium => super::medium::groupby_agg(&records, agg),
             Self::Large => super::large::groupby_agg(&records, agg),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn groupby_agg_timed(&self, records: &[Record], agg: &str) -> TimedResult {
+        match self {
+            Self::Medium => super::medium::groupby_agg_timed(&records, agg),
+            Self::Large => super::large::groupby_agg_timed(&records, agg),
             _ => unimplemented!(),
         }
     }

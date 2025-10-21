@@ -4,7 +4,7 @@ use rand::distributions::{Distribution, Uniform};
 use rand::thread_rng;
 use std::time::Instant;
 
-use cdp::worlds::types::{Record, WorldType};
+use cdp::worlds::types::{Record, WorldType, TimedResult};
 
 /// Benchmark throughput vs cardinality for CDP groupby implementations.
 #[derive(Parser, Debug)]
@@ -55,7 +55,8 @@ fn main() -> Result<()> {
 
     let mut rng = thread_rng();
 
-    println!("world,cardinality,throughput_records_per_sec");
+    // Updated CSV header
+    println!("world,cardinality,throughput_records_per_sec,t_medium,t_finalize");
 
     for world in worlds {
         for power in 1..=max_pow {
@@ -70,13 +71,17 @@ fn main() -> Result<()> {
                 })
                 .collect();
 
-            // Time the group-by
+            // Time using groupby_agg_timed
             let start = Instant::now();
-            let _ = world.groupby_agg(&records, &agg);
-            let elapsed = start.elapsed().as_secs_f64();
+            let timing: TimedResult = world.groupby_agg_timed(&records, &agg);
+            let total_elapsed = start.elapsed().as_secs_f64();
 
-            let throughput = num_records as f64 / elapsed;
-            println!("{:?},{},{}", world, card, throughput);
+            let throughput = num_records as f64 / total_elapsed;
+
+            println!(
+                "{:?},{},{:.3},{:.6},{:.6}",
+                world, card, throughput, timing.t_update, timing.t_finalize
+            );
         }
     }
 
