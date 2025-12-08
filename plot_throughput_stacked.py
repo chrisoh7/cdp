@@ -40,12 +40,12 @@ total_time = t_update + t_finalize
 # ------------------------------
 plt.figure(figsize=(10, 6))
 
-plt.bar(x, t_update, color="#4C72B0", label="update phase (medium_world)")
-plt.bar(x, t_finalize, bottom=t_update, color="#55A868", label="finalize phase")
+plt.bar(x, t_update, color="#4C72B0", label="update")
+plt.bar(x, t_finalize, bottom=t_update, color="#55A868", label="finalize")
 
 plt.ylabel("Time (seconds)")
-plt.xlabel("World and Cardinality")
-plt.title("CDP Groupby Timing Breakdown per World")
+plt.xlabel("Method and Cardinality")
+plt.title("CDP Groupby Timing Breakdown")
 plt.xticks(x, labels, rotation=45, ha="right")
 plt.grid(axis="y", linestyle="--", alpha=0.5)
 plt.legend()

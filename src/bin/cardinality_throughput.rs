@@ -4,7 +4,7 @@ use rand::distributions::{Distribution, Uniform};
 use rand::thread_rng;
 use std::time::Instant;
 
-use cdp::worlds::types::{Record, WorldType, TimedResult};
+use cdp::worlds::types::{Aggregation, Record, TimedResult, WorldType};
 
 /// Benchmark throughput vs cardinality for CDP groupby implementations.
 #[derive(Parser, Debug)]
@@ -29,7 +29,7 @@ struct Args {
 }
 
 fn all_worlds() -> Vec<WorldType> {
-    // TODO: vec![WorldType::Small, WorldType::Medium, WorldType::Large]
+    // Default: Medium (PerThreadLocal) and Large (Global)
     vec![WorldType::Medium, WorldType::Large]
 }
 
@@ -46,25 +46,37 @@ fn parse_world(name: &str) -> Vec<WorldType> {
     }
 }
 
+/// Convert internal world names to display labels
+fn world_label(world: &WorldType) -> &'static str {
+    match world {
+        WorldType::Medium => "PerThreadLocal",
+        WorldType::Large => "Global",
+        _ => "Unknown",
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     let num_records = args.num_records;
     let max_pow = args.max_pow;
-    let agg = args.agg;
+    let agg: Aggregation = args
+        .agg
+        .parse()
+        .unwrap_or_else(|e| panic!("invalid aggregation '{}': {}", args.agg, e));
     let worlds = parse_world(&args.world);
 
     let mut rng = thread_rng();
 
-    // Updated CSV header
-    println!("world,cardinality,throughput_records_per_sec,t_medium,t_finalize");
+    // CSV header
+    println!("world,cardinality,throughput_records_per_sec,t_update,t_finalize");
 
     for world in worlds {
-        for power in 1..=max_pow {
+        for power in 5..=max_pow {
             let card = 10_i32.pow(power);
             let dist = Uniform::new(0, card);
 
-            // Generate random records
-            let records: Vec<Record> = (0..num_records)
+            // Generate random records with u64 key
+            let records: Vec<Record<u64>> = (0..num_records)
                 .map(|_| Record {
                     key: dist.sample(&mut rng) as u64,
                     value: 1.0,
@@ -73,14 +85,19 @@ fn main() -> Result<()> {
 
             // Time using groupby_agg_timed
             let start = Instant::now();
-            let timing: TimedResult = world.groupby_agg_timed(&records, &agg);
+            let timing: TimedResult<u64> = world.groupby_agg_timed(&records, agg);
             let total_elapsed = start.elapsed().as_secs_f64();
 
             let throughput = num_records as f64 / total_elapsed;
 
+            // Use mapped display label instead of Debug name
             println!(
-                "{:?},{},{:.3},{:.6},{:.6}",
-                world, card, throughput, timing.t_update, timing.t_finalize
+                "{},{},{:.3},{:.6},{:.6}",
+                world_label(&world),
+                card,
+                throughput,
+                timing.t_update,
+                timing.t_finalize
             );
         }
     }
