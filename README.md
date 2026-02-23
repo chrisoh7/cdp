@@ -11,7 +11,17 @@ More specifically, the project aims to define the three worlds: three methods fo
 
 My primary job is to build baseline codes for the three worlds in Rust and run distribution streams of increasing cardinalities. I’ll try to keep this document up-to-date.
 
-To generate a throughput vs. cardinality plot of the baseline code, run `./run_throughput_benchmark.sh`. 
+To generate a throughput vs. cardinality plot of the baseline code, run `./run_throughput.sh`.
+For the stacked update/finalize plot, run `./run_throughput_stacked.sh`.
+
+## Current Performance Notes
+These are the implementation choices that currently benchmark best in this repo:
+
+- `medium` world uses per-thread local `HashMap`s, then parallel-reduces partial maps during merge.
+- `medium` world uses `FnvBuildHasher` for faster hash computation and pre-sizes local maps.
+- `medium` chunk size is computed from dataset size and Rayon thread count (`records / threads`).
+- `large` world uses a single global `scc::HashMap` with `records.par_chunks(4096)` for updates.
+- `large` world pre-sizes both concurrent maps and output maps to reduce reallocations.
 
 ## Type Definition
 ```

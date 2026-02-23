@@ -94,7 +94,10 @@ impl AggState {
             Aggregation::Sum => AggState::Sum(value),
             Aggregation::Min => AggState::Min(value),
             Aggregation::Max => AggState::Max(value),
-            Aggregation::Avg => AggState::Avg { sum: value, count: 1 },
+            Aggregation::Avg => AggState::Avg {
+                sum: value,
+                count: 1,
+            },
             Aggregation::Count => AggState::Count(1.0),
         }
     }
@@ -119,10 +122,7 @@ impl AggState {
             (AggState::Sum(a), AggState::Sum(b)) => *a += b,
             (AggState::Min(a), AggState::Min(b)) => *a = a.min(b),
             (AggState::Max(a), AggState::Max(b)) => *a = a.max(b),
-            (
-                AggState::Avg { sum: s1, count: c1 },
-                AggState::Avg { sum: s2, count: c2 },
-            ) => {
+            (AggState::Avg { sum: s1, count: c1 }, AggState::Avg { sum: s2, count: c2 }) => {
                 *s1 += s2;
                 *c1 += c2;
             }
@@ -173,8 +173,13 @@ impl WorldType {
         path: &str,
         key_transforms: &[Option<Box<dyn Fn(u64) -> u64>>],
     ) -> parquet::errors::Result<HashMap<(u64, u64), f64>> {
-        let records: Vec<U64PairRecord> =
-            read_parquet_to_records_two_keys_with_transforms(path, key1, key2, val, key_transforms)?;
+        let records: Vec<U64PairRecord> = read_parquet_to_records_two_keys_with_transforms(
+            path,
+            key1,
+            key2,
+            val,
+            key_transforms,
+        )?;
         println!("Loaded {} two-key records", records.len());
 
         Ok(self.groupby_agg(&records, agg))

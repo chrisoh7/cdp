@@ -95,7 +95,6 @@
 //     compare_with_duckdb(WorldType::Medium, "passenger_count", "total_amount", "avg", path)
 // }
 
-
 use anyhow::Result;
 use cdp::worlds::types::{Aggregation, Record, WorldType}; // adjust path if module is local
 use cdp::worlds::util::read_parquet_to_records;
@@ -117,7 +116,10 @@ fn compare_with_duckdb(
     // Set up in-memory DuckDB
     let conn = duckdb::Connection::open_in_memory()?;
     conn.execute(
-        &format!("CREATE TABLE trips AS SELECT * FROM parquet_scan('{}')", path),
+        &format!(
+            "CREATE TABLE trips AS SELECT * FROM parquet_scan('{}')",
+            path
+        ),
         [],
     )?;
 
@@ -166,7 +168,10 @@ where
     for (k, ref_v) in reference {
         let my_v = mine.get(k).copied().unwrap_or(f64::NAN);
         if (my_v - ref_v).abs() > 1e-6 {
-            println!("Key {:?} mismatch: mine = {:.6}, ref = {:.6}", k, my_v, ref_v);
+            println!(
+                "Key {:?} mismatch: mine = {:.6}, ref = {:.6}",
+                k, my_v, ref_v
+            );
             mismatches += 1;
         }
     }
@@ -240,7 +245,10 @@ fn test_groupby_sum_multikey_passenger_amount() -> Result<()> {
     // -------- DuckDB side (reference) --------
     let conn = duckdb::Connection::open_in_memory()?;
     conn.execute(
-        &format!("CREATE TABLE trips AS SELECT * FROM parquet_scan('{}')", path),
+        &format!(
+            "CREATE TABLE trips AS SELECT * FROM parquet_scan('{}')",
+            path
+        ),
         [],
     )?;
 

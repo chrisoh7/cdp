@@ -4,11 +4,11 @@ use std::sync::Arc;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::errors::ParquetError;
 
-use arrow::array::{Array, Int64Array, Float64Array, TimestampMicrosecondArray, UInt64Array};
-use arrow::datatypes::{DataType, TimeUnit};
+use arrow::array::{Array, Float64Array, Int64Array, TimestampMicrosecondArray, UInt64Array};
 use arrow::compute::cast;
+use arrow::datatypes::{DataType, TimeUnit};
 
-use chrono::{DateTime, Utc, Datelike};
+use chrono::{DateTime, Datelike, Utc};
 
 use super::types::Record;
 
@@ -141,15 +141,9 @@ enum KeyColumn {
 }
 
 impl KeyColumn {
-    fn from_field(
-        column: &Arc<dyn Array>,
-        dtype: &DataType,
-    ) -> Result<Self, ParquetError> {
+    fn from_field(column: &Arc<dyn Array>, dtype: &DataType) -> Result<Self, ParquetError> {
         match dtype {
-            DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64 => {
+            DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
                 let normalized = normalize_column(column, &DataType::Int64)?;
                 let arr = normalized
                     .as_any()
@@ -158,10 +152,7 @@ impl KeyColumn {
                     .clone();
                 Ok(KeyColumn::Signed(arr))
             }
-            DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64 => {
+            DataType::UInt8 | DataType::UInt16 | DataType::UInt32 | DataType::UInt64 => {
                 let normalized = normalize_column(column, &DataType::UInt64)?;
                 let arr = normalized
                     .as_any()
@@ -264,7 +255,10 @@ pub fn read_parquet_to_records_two_keys_with_transforms(
                 k2 = f(k2);
             }
 
-            records.push(Record { key: (k1, k2), value: v });
+            records.push(Record {
+                key: (k1, k2),
+                value: v,
+            });
         }
     }
 
@@ -278,8 +272,7 @@ pub fn to_year_from_epoch_micros(ts_micros: u64) -> u64 {
     let micros_rem = ts_i64 % 1_000_000;
     let nanos = (micros_rem as i64 * 1000) as u32;
 
-    let dt = DateTime::<Utc>::from_timestamp(secs, nanos)
-        .expect("invalid timestamp");
+    let dt = DateTime::<Utc>::from_timestamp(secs, nanos).expect("invalid timestamp");
 
     dt.year() as u64
 }
