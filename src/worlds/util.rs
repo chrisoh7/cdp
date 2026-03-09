@@ -138,6 +138,7 @@ enum KeyColumn {
     Signed(Int64Array),
     Unsigned(UInt64Array),
     TimestampMicros(TimestampMicrosecondArray),
+    Float64(Float64Array),
 }
 
 impl KeyColumn {
@@ -173,6 +174,15 @@ impl KeyColumn {
                     .clone();
                 Ok(KeyColumn::TimestampMicros(arr))
             }
+            DataType::Float32 | DataType::Float64 => {
+                let normalized = normalize_column(column, &DataType::Float64)?;
+                let arr = normalized
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .expect("normalized Float64 array")
+                    .clone();
+                Ok(KeyColumn::Float64(arr))
+            }
             other => Err(ParquetError::General(format!(
                 "Unsupported key type for two-key reader: {:?}",
                 other
@@ -186,6 +196,7 @@ impl KeyColumn {
             KeyColumn::Signed(arr) => arr.is_null(idx),
             KeyColumn::Unsigned(arr) => arr.is_null(idx),
             KeyColumn::TimestampMicros(arr) => arr.is_null(idx),
+            KeyColumn::Float64(arr) => arr.is_null(idx),
         }
     }
 
@@ -195,6 +206,7 @@ impl KeyColumn {
             KeyColumn::Signed(arr) => arr.value(idx) as u64,
             KeyColumn::Unsigned(arr) => arr.value(idx),
             KeyColumn::TimestampMicros(arr) => arr.value(idx) as u64,
+            KeyColumn::Float64(arr) => arr.value(idx).to_bits(),
         }
     }
 }
@@ -265,6 +277,88 @@ pub fn read_parquet_to_records_two_keys_with_transforms(
     Ok(records)
 }
 
+/// Three-key reader with optional per-key transforms over integer/timestamp/float key columns.
+///
+/// Float keys are passed to transforms as `f64::to_bits`; use `round_from_f64_bits` for
+/// SQL-like `round(...)` style grouping.
+pub fn read_parquet_to_records_three_keys_with_transforms(
+    path: &str,
+    key1_str: &str,
+    key2_str: &str,
+    key3_str: &str,
+    val_str: &str,
+    key_transforms: &[Option<Box<dyn Fn(u64) -> u64>>],
+) -> parquet::errors::Result<Vec<Record<(u64, u64, u64)>>> {
+    assert!(
+        key_transforms.len() == 3,
+        "expected 3 key transforms (one per key)"
+    );
+
+    let file = File::open(path)?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let mut record_batch_reader = builder.build()?;
+
+    let mut records: Vec<Record<(u64, u64, u64)>> = Vec::new();
+
+    while let Some(batch_result) = record_batch_reader.next() {
+        let batch = batch_result?;
+        let schema = batch.schema();
+
+        let key1_idx = schema.index_of(key1_str).unwrap();
+        let key2_idx = schema.index_of(key2_str).unwrap();
+        let key3_idx = schema.index_of(key3_str).unwrap();
+        let val_idx = schema.index_of(val_str).unwrap();
+
+        let key1_col = batch.column(key1_idx);
+        let key1_data = KeyColumn::from_field(key1_col, schema.field(key1_idx).data_type())?;
+
+        let key2_col = batch.column(key2_idx);
+        let key2_data = KeyColumn::from_field(key2_col, schema.field(key2_idx).data_type())?;
+
+        let key3_col = batch.column(key3_idx);
+        let key3_data = KeyColumn::from_field(key3_col, schema.field(key3_idx).data_type())?;
+
+        let val_col = batch.column(val_idx);
+        let val_norm = normalize_column(val_col, &DataType::Float64)?;
+        let val_array = val_norm
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("val_norm should be Float64Array");
+
+        for i in 0..batch.num_rows() {
+            if key1_data.is_null(i)
+                || key2_data.is_null(i)
+                || key3_data.is_null(i)
+                || val_array.is_null(i)
+            {
+                continue;
+            }
+
+            let mut k1 = key1_data.value_u64(i);
+            let mut k2 = key2_data.value_u64(i);
+            let mut k3 = key3_data.value_u64(i);
+            let v = val_array.value(i);
+
+            if let Some(f) = &key_transforms[0] {
+                k1 = f(k1);
+            }
+            if let Some(f) = &key_transforms[1] {
+                k2 = f(k2);
+            }
+            if let Some(f) = &key_transforms[2] {
+                k3 = f(k3);
+            }
+
+            records.push(Record {
+                key: (k1, k2, k3),
+                value: v,
+            });
+        }
+    }
+
+    Ok(records)
+}
+
 /// Convert microsecond timestamps since epoch -> year (UTC).
 pub fn to_year_from_epoch_micros(ts_micros: u64) -> u64 {
     let ts_i64 = ts_micros as i64;
@@ -275,4 +369,9 @@ pub fn to_year_from_epoch_micros(ts_micros: u64) -> u64 {
     let dt = DateTime::<Utc>::from_timestamp(secs, nanos).expect("invalid timestamp");
 
     dt.year() as u64
+}
+
+/// Round a float key encoded as `f64::to_bits` to the nearest integer bucket.
+pub fn round_from_f64_bits(bits: u64) -> u64 {
+    f64::from_bits(bits).round() as u64
 }

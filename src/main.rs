@@ -1,7 +1,8 @@
 mod worlds;
 use mimalloc::MiMalloc;
+use std::cmp::Ordering;
 use worlds::types::{Aggregation, WorldType};
-use worlds::util::to_year_from_epoch_micros;
+use worlds::util::{round_from_f64_bits, to_year_from_epoch_micros};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -86,6 +87,63 @@ fn main() -> parquet::errors::Result<()> {
         .unwrap();
 
     println!("Q3 (order swapped) Large Result: {:?}", result_q3_inv_large);
+
+    // Q4:
+    // SELECT passenger_count, toYear(pickup_date) AS year, round(trip_distance) AS distance, count(*)
+    // FROM trips_mergetree
+    // GROUP BY passenger_count, year, distance
+    // ORDER BY year, count(*) DESC;
+    let mut result_q4_medium: Vec<((u64, u64, u64), f64)> = WorldType::Medium
+        .groupby_agg_three_keys_from_path_with_transforms(
+            "passenger_count",
+            "tpep_pickup_datetime",
+            "trip_distance",
+            "total_amount", // any non-null numeric column for COUNT(*)
+            Aggregation::Count,
+            path,
+            &[
+                None,
+                Some(Box::new(to_year_from_epoch_micros)),
+                Some(Box::new(round_from_f64_bits)),
+            ],
+        )?
+        .into_iter()
+        .collect();
+
+    result_q4_medium.sort_by(|a, b| {
+        let year_cmp = a.0 .1.cmp(&b.0 .1);
+        if year_cmp != Ordering::Equal {
+            return year_cmp;
+        }
+        b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
+    });
+    println!("Q4 Medium Result: {:?}", result_q4_medium);
+
+    let mut result_q4_large: Vec<((u64, u64, u64), f64)> = WorldType::Large
+        .groupby_agg_three_keys_from_path_with_transforms(
+            "passenger_count",
+            "tpep_pickup_datetime",
+            "trip_distance",
+            "total_amount", // any non-null numeric column for COUNT(*)
+            Aggregation::Count,
+            path,
+            &[
+                None,
+                Some(Box::new(to_year_from_epoch_micros)),
+                Some(Box::new(round_from_f64_bits)),
+            ],
+        )?
+        .into_iter()
+        .collect();
+
+    result_q4_large.sort_by(|a, b| {
+        let year_cmp = a.0 .1.cmp(&b.0 .1);
+        if year_cmp != Ordering::Equal {
+            return year_cmp;
+        }
+        b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
+    });
+    println!("Q4 Large Result: {:?}", result_q4_large);
 
     Ok(())
 }

@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use super::util::{
     read_parquet_single_column, read_parquet_to_records,
+    read_parquet_to_records_three_keys_with_transforms,
     read_parquet_to_records_two_keys_with_transforms,
 };
 
@@ -50,6 +51,7 @@ pub struct TimedResult<K> {
 // Convenience aliases for the common single-key case
 pub type U64Record = Record<u64>;
 pub type U64PairRecord = Record<(u64, u64)>;
+pub type U64TripleRecord = Record<(u64, u64, u64)>;
 pub type U64TimedResult = TimedResult<u64>;
 
 //-------------------Type Implementation-------------------//
@@ -181,6 +183,30 @@ impl WorldType {
             key_transforms,
         )?;
         println!("Loaded {} two-key records", records.len());
+
+        Ok(self.groupby_agg(&records, agg))
+    }
+
+    /// Three-key version with optional transform lambdas on each key.
+    pub fn groupby_agg_three_keys_from_path_with_transforms(
+        &self,
+        key1: &str,
+        key2: &str,
+        key3: &str,
+        val: &str,
+        agg: Aggregation,
+        path: &str,
+        key_transforms: &[Option<Box<dyn Fn(u64) -> u64>>],
+    ) -> parquet::errors::Result<HashMap<(u64, u64, u64), f64>> {
+        let records: Vec<U64TripleRecord> = read_parquet_to_records_three_keys_with_transforms(
+            path,
+            key1,
+            key2,
+            key3,
+            val,
+            key_transforms,
+        )?;
+        println!("Loaded {} three-key records", records.len());
 
         Ok(self.groupby_agg(&records, agg))
     }

@@ -99,13 +99,10 @@ where
 
     let start_finalize = record_timing.then(|| Instant::now());
     // Finalize phase: merge partial maps in parallel (tree reduction).
-    let merged: HashMap<K, AggState, FnvBuildHasher> =
-        partials
-            .into_par_iter()
-            .reduce(
-                || HashMap::with_hasher(FnvBuildHasher::default()),
-                merge_two_partials,
-            );
+    let merged: HashMap<K, AggState, FnvBuildHasher> = partials.into_par_iter().reduce(
+        || HashMap::with_hasher(FnvBuildHasher::default()),
+        merge_two_partials,
+    );
 
     let t_finalize = start_finalize
         .map(|start| start.elapsed().as_secs_f64())
@@ -137,9 +134,7 @@ where
     a
 }
 
-fn into_std_hashmap<K>(
-    input: HashMap<K, AggState, FnvBuildHasher>,
-) -> HashMap<K, AggState>
+fn into_std_hashmap<K>(input: HashMap<K, AggState, FnvBuildHasher>) -> HashMap<K, AggState>
 where
     K: Eq + Hash,
 {
