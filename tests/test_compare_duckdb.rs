@@ -85,13 +85,13 @@
 
 // #[test]
 // fn test_groupby_count() -> Result<()> {
-//     let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+//     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
 //     compare_with_duckdb(WorldType::Medium, "passenger_count", "*", "count", path)
 // }
 
 // #[test]
 // fn test_groupby_avg() -> Result<()> {
-//     let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+//     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
 //     compare_with_duckdb(WorldType::Medium, "passenger_count", "total_amount", "avg", path)
 // }
 
@@ -190,7 +190,7 @@ where
 
 #[test]
 fn test_groupby_count() -> Result<()> {
-    let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
     compare_with_duckdb(
         WorldType::Medium,
         "passenger_count",
@@ -202,7 +202,7 @@ fn test_groupby_count() -> Result<()> {
 
 #[test]
 fn test_groupby_avg() -> Result<()> {
-    let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
     compare_with_duckdb(
         WorldType::Medium,
         "passenger_count",
@@ -222,7 +222,7 @@ fn test_groupby_avg() -> Result<()> {
 ///   value = total_amount
 #[test]
 fn test_groupby_sum_multikey_passenger_amount() -> Result<()> {
-    let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
 
     // -------- CDP side (our engine) --------
     // Load single-key records: key = passenger_count, value = total_amount

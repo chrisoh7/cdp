@@ -11,7 +11,7 @@ use worlds::util::{
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> parquet::errors::Result<()> {
-    let path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/yellow_tripdata_2025-01.parquet";
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
 
     // Q1: SELECT passenger_count, count(*) FROM trips_mergetree GROUP BY passenger_count;
 
@@ -149,7 +149,7 @@ fn main() -> parquet::errors::Result<()> {
     println!("Q4 Large Result: {:?}", result_q4_large);
 
     // Q5: SELECT toYYYYMMDD(timestamp) AS day, count() FROM sensors GROUP BY day ORDER BY day ASC
-    let sensors_path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet";
+    let sensors_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet");
     let sensor_records = read_sensors_yyyymmdd_count(sensors_path, "timestamp")?;
     println!("Loaded {} sensor records", sensor_records.len());
 
@@ -164,7 +164,7 @@ fn main() -> parquet::errors::Result<()> {
     println!("Q5 Large Result (sensors count by day): {:?}", result_q5_large_sorted);
 
     // Q6: SELECT machine_name, AVG(COALESCE(cpu_user, 0.0)) AS cpu FROM logs1 GROUP BY machine_name
-    let brown_path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/subsets/brown_mgbench1_subset_200k.parquet";
+    let brown_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/subsets/brown_mgbench1_subset_200k.parquet");
     let brown_records = read_parquet_string_key_to_records(brown_path, "machine_name", "cpu_user")?;
     println!("Loaded {} brown records", brown_records.len());
 
