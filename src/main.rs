@@ -2,7 +2,10 @@ mod worlds;
 use mimalloc::MiMalloc;
 use std::cmp::Ordering;
 use worlds::types::{Aggregation, WorldType};
-use worlds::util::{round_from_f64_bits, to_year_from_epoch_micros};
+use worlds::util::{
+    read_parquet_string_key_to_records, read_sensors_yyyymmdd_count, round_from_f64_bits,
+    to_year_from_epoch_micros,
+};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -144,6 +147,32 @@ fn main() -> parquet::errors::Result<()> {
         b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
     });
     println!("Q4 Large Result: {:?}", result_q4_large);
+
+    // Q5: SELECT toYYYYMMDD(timestamp) AS day, count() FROM sensors GROUP BY day ORDER BY day ASC
+    let sensors_path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet";
+    let sensor_records = read_sensors_yyyymmdd_count(sensors_path, "timestamp")?;
+    println!("Loaded {} sensor records", sensor_records.len());
+
+    let result_q5_medium = WorldType::Medium.groupby_agg(&sensor_records, Aggregation::Count);
+    let mut result_q5_medium_sorted: Vec<(u64, f64)> = result_q5_medium.into_iter().collect();
+    result_q5_medium_sorted.sort_by_key(|(day, _)| *day);
+    println!("Q5 Medium Result (sensors count by day): {:?}", result_q5_medium_sorted);
+
+    let result_q5_large = WorldType::Large.groupby_agg(&sensor_records, Aggregation::Count);
+    let mut result_q5_large_sorted: Vec<(u64, f64)> = result_q5_large.into_iter().collect();
+    result_q5_large_sorted.sort_by_key(|(day, _)| *day);
+    println!("Q5 Large Result (sensors count by day): {:?}", result_q5_large_sorted);
+
+    // Q6: SELECT machine_name, AVG(COALESCE(cpu_user, 0.0)) AS cpu FROM logs1 GROUP BY machine_name
+    let brown_path = "/Users/hyunseokoh/hyunseoo/notes/cdp/src/data/subsets/brown_mgbench1_subset_200k.parquet";
+    let brown_records = read_parquet_string_key_to_records(brown_path, "machine_name", "cpu_user")?;
+    println!("Loaded {} brown records", brown_records.len());
+
+    let result_q6_medium = WorldType::Medium.groupby_agg(&brown_records, Aggregation::Avg);
+    println!("Q6 Medium Result (brown avg cpu by machine, keys are FNV hashes of machine names): {:?}", result_q6_medium);
+
+    let result_q6_large = WorldType::Large.groupby_agg(&brown_records, Aggregation::Avg);
+    println!("Q6 Large Result (brown avg cpu by machine, keys are FNV hashes of machine names): {:?}", result_q6_large);
 
     Ok(())
 }

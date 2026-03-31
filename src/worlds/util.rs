@@ -1,14 +1,16 @@
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::errors::ParquetError;
 
-use arrow::array::{Array, Float64Array, Int64Array, TimestampMicrosecondArray, UInt64Array};
+use arrow::array::{Array, Float64Array, Int64Array, StringArray, TimestampMicrosecondArray, UInt64Array};
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, TimeUnit};
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use fnv::FnvHasher;
 
 use super::types::Record;
 
@@ -374,4 +376,121 @@ pub fn to_year_from_epoch_micros(ts_micros: u64) -> u64 {
 /// Round a float key encoded as `f64::to_bits` to the nearest integer bucket.
 pub fn round_from_f64_bits(bits: u64) -> u64 {
     f64::from_bits(bits).round() as u64
+}
+
+/// Convert microsecond timestamps since epoch -> YYYYMMDD integer (e.g. 20190601).
+pub fn to_yyyymmdd_from_epoch_micros(ts_micros: u64) -> u64 {
+    let ts_i64 = ts_micros as i64;
+    let secs = ts_i64 / 1_000_000;
+    let micros_rem = ts_i64 % 1_000_000;
+    let nanos = (micros_rem * 1000) as u32;
+    let dt = DateTime::<Utc>::from_timestamp(secs, nanos).expect("invalid timestamp");
+    (dt.year() as u64) * 10_000 + (dt.month() as u64) * 100 + (dt.day() as u64)
+}
+
+/// Reads a timestamp column from parquet, converts each value to a YYYYMMDD integer key,
+/// and returns count records (value = 1.0) for COUNT(*) GROUP BY day queries.
+///
+/// Handles both native Timestamp columns and string columns ("2019-06-01T00:00:00").
+pub fn read_sensors_yyyymmdd_count(
+    path: &str,
+    timestamp_col: &str,
+) -> parquet::errors::Result<Vec<Record<u64>>> {
+    let file = File::open(path)?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let mut record_batch_reader = builder.build()?;
+    let mut records = Vec::new();
+
+    while let Some(batch_result) = record_batch_reader.next() {
+        let batch = batch_result?;
+        let schema = batch.schema();
+        let ts_idx = schema.index_of(timestamp_col).unwrap();
+        let ts_col = batch.column(ts_idx);
+        let dtype = schema.field(ts_idx).data_type();
+
+        if matches!(dtype, DataType::Utf8 | DataType::LargeUtf8) {
+            // String timestamp: normalize to Utf8 then parse "2019-06-01T00:00:00"
+            let norm = normalize_column(ts_col, &DataType::Utf8)?;
+            let arr = norm
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("expected StringArray after Utf8 normalization");
+            for i in 0..batch.num_rows() {
+                if arr.is_null(i) {
+                    continue;
+                }
+                let s = arr.value(i);
+                let ndt = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
+                    .expect("invalid datetime string in sensors");
+                let epoch_micros = ndt.and_utc().timestamp_micros() as u64;
+                let day = to_yyyymmdd_from_epoch_micros(epoch_micros);
+                records.push(Record { key: day, value: 1.0 });
+            }
+        } else {
+            // Numeric / native Timestamp: use KeyColumn for type dispatch
+            let key_data = KeyColumn::from_field(ts_col, dtype)?;
+            for i in 0..batch.num_rows() {
+                if key_data.is_null(i) {
+                    continue;
+                }
+                let ts_micros = key_data.value_u64(i);
+                let day = to_yyyymmdd_from_epoch_micros(ts_micros);
+                records.push(Record { key: day, value: 1.0 });
+            }
+        }
+    }
+
+    Ok(records)
+}
+
+/// Reads a string key column + float value column from parquet.
+/// The string key is hashed to u64 via FNV for use as a groupby key.
+/// Null values in the value column are treated as 0.0 (COALESCE semantics).
+pub fn read_parquet_string_key_to_records(
+    path: &str,
+    key_str: &str,
+    val_str: &str,
+) -> parquet::errors::Result<Vec<Record<u64>>> {
+    let file = File::open(path)?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+    let mut record_batch_reader = builder.build()?;
+    let mut records = Vec::new();
+
+    while let Some(batch_result) = record_batch_reader.next() {
+        let batch = batch_result?;
+        let schema = batch.schema();
+        let key_idx = schema.index_of(key_str).unwrap();
+        let val_idx = schema.index_of(val_str).unwrap();
+
+        let key_col = batch.column(key_idx);
+        let key_norm = normalize_column(key_col, &DataType::Utf8)?;
+        let key_arr = key_norm
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .expect("key column must be Utf8/StringArray");
+
+        let val_col = batch.column(val_idx);
+        let val_norm = normalize_column(val_col, &DataType::Float64)?;
+        let val_arr = val_norm
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("val_norm should be Float64Array");
+
+        for i in 0..batch.num_rows() {
+            if key_arr.is_null(i) {
+                continue;
+            }
+            let s = key_arr.value(i);
+            let mut h = FnvHasher::default();
+            s.hash(&mut h);
+            // COALESCE(cpu_user, 0.0): treat null values as 0.0
+            let val = if val_arr.is_null(i) { 0.0 } else { val_arr.value(i) };
+            records.push(Record {
+                key: h.finish(),
+                value: val,
+            });
+        }
+    }
+
+    Ok(records)
 }
