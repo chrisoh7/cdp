@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     println!("world,cardinality,throughput_records_per_sec,t_update,t_finalize");
 
     for world in worlds {
-        for power in 5..=max_pow {
+        for power in 1..=max_pow {
             let card = 10_i32.pow(power);
             let dist = Uniform::new(0, card);
 
