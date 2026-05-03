@@ -23,6 +23,54 @@ The repository is structured as a runnable baseline rather than a research scrat
 
 ## Quick Start
 
+The real-data query runner expects files under `src/data/`, which are intentionally not committed.
+
+Build and run the synthetic benchmark only:
+
+```bash
+cargo run --release --bin cardinality_throughput -- --world all --max-pow 5 --num-records 1000000
+```
+
+Set up datasets first if you want to run the real-data query suite:
+
+```bash
+cargo run --release -- --query all --world all
+```
+
+## Dataset Setup
+
+This repo ignores `src/data/` in git. Before running the query runner or DuckDB-backed tests, place datasets at these exact paths:
+
+- `src/data/yellow_tripdata_2025-01.parquet`
+- `src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet`
+- `src/data/subsets/brown_mgbench1_subset_200k.parquet`
+
+Recommended setup flow:
+
+1. Create the directories:
+
+```bash
+mkdir -p src/data/subsets
+```
+
+2. Obtain the source datasets from the documented upstream pages:
+
+- NYC Taxi:
+  https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+  https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi
+- Environmental sensors:
+  https://clickhouse.com/docs/getting-started/example-datasets/environmental-sensors
+- Brown / mgBench:
+  https://clickhouse.com/docs/getting-started/example-datasets/brown-benchmark
+
+3. Place or derive local files using the repo’s expected filenames.
+
+Notes:
+
+- `yellow_tripdata_2025-01.parquet` is expected as a full Parquet file at `src/data/`.
+- The sensors and Brown files in this repo are `200k` local benchmark subsets. They are not canonical upstream filenames. You need to create or copy subsets into the expected paths if you want the built-in queries and tests to run unchanged.
+- If `src/data/` is missing, the synthetic cardinality benchmark still works because it generates records in memory.
+
 Build and run the full query suite:
 
 ```bash
@@ -91,10 +139,12 @@ Data-loading helpers normalize keys to `u64`-based representations:
 
 - `src/data/yellow_tripdata_2025-01.parquet` comes from the NYC TLC trip record data source:
   https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-- ClickHouse also maintains public dataset references and examples around NYC Taxi:
-  https://datasets.clickhouse.com/index.html
-  https://clickhouse.com/jp/integrations/gcs
-- The environmental sensors and Brown logs files under `src/data/subsets/` are local benchmark subsets rather than canonical upstream distributions.
+- ClickHouse’s NYC Taxi example dataset page is here:
+  https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi
+- `src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet` is a local benchmark subset derived from the ClickHouse environmental sensors example dataset:
+  https://clickhouse.com/docs/getting-started/example-datasets/environmental-sensors
+- `src/data/subsets/brown_mgbench1_subset_200k.parquet` is a local benchmark subset derived from the ClickHouse Brown University benchmark dataset:
+  https://clickhouse.com/docs/getting-started/example-datasets/brown-benchmark
 
 For fuller provenance and reproducibility notes, see `OVERVIEW.md`.
 
@@ -106,4 +156,4 @@ For fuller provenance and reproducibility notes, see `OVERVIEW.md`.
 - single-key `AVG`
 - multi-key `SUM`
 
-This means the tests fail on real mismatches now; they no longer just print differences.
+This means the tests fail on real mismatches now; they no longer just print differences. These tests also require the datasets under `src/data/`.
