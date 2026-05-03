@@ -87,6 +87,17 @@ Data-loading helpers normalize keys to `u64`-based representations:
 - timestamps use epoch microseconds, optionally transformed into buckets
 - strings are hashed with FNV-64
 
+## Dataset Provenance
+
+- `src/data/yellow_tripdata_2025-01.parquet` comes from the NYC TLC trip record data source:
+  https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+- ClickHouse also maintains public dataset references and examples around NYC Taxi:
+  https://datasets.clickhouse.com/index.html
+  https://clickhouse.com/jp/integrations/gcs
+- The environmental sensors and Brown logs files under `src/data/subsets/` are local benchmark subsets rather than canonical upstream distributions.
+
+For fuller provenance and reproducibility notes, see `OVERVIEW.md`.
+
 ## Verification
 
 `cargo test` compares the runnable software worlds against DuckDB for:
