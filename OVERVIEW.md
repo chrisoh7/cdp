@@ -25,6 +25,7 @@ Record { key: K, value: f64 }
 - `Small`
 - `Medium`
 - `Large`
+- `LargeBuffered`
 
 ## Execution Strategies
 
@@ -51,6 +52,30 @@ Record { key: K, value: f64 }
 - All workers update a shared `DashMap`
 - There is no merge phase beyond final materialization
 - This keeps memory use lower than per-thread duplication but is far more sensitive to contention
+
+### LargeBuffered
+
+`src/worlds/large.rs`
+
+- All workers still converge into one shared `DashMap`
+- Each chunk performs local pre-aggregation before touching the shared map
+- This is intentionally a separate variant because it improves performance by reducing the contention that the pure `Large` world is meant to expose
+
+## Rationale For The Split
+
+Originally, the optimized global-map path lived inside `Large`. That made the code faster, but it also weakened the interpretation of the benchmark. A world called `Large` is supposed to represent direct concurrent updates into one shared global structure. Once a local combiner is inserted in front of that structure, the concurrency story changes materially.
+
+The repository now keeps both forms on purpose:
+
+- `Large` is the pure shared-state baseline
+- `LargeBuffered` is the optimized variant with local pre-aggregation
+
+This separation serves two goals:
+
+- preserve benchmark honesty by keeping the pure contention case visible
+- preserve practical performance work by retaining the optimized version as an explicit alternative
+
+In other words, `LargeBuffered` is not just an implementation detail. It is a different experimental point in the design space, and it is documented separately so users can reason about its performance correctly.
 
 ## Data Pipeline
 

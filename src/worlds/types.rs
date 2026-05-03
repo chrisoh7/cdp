@@ -40,6 +40,7 @@ pub enum WorldType {
     Small,
     Medium,
     Large,
+    LargeBuffered,
 }
 
 pub struct TimedResult<K> {
@@ -95,6 +96,7 @@ impl WorldType {
             WorldType::Small => "small",
             WorldType::Medium => "medium",
             WorldType::Large => "large",
+            WorldType::LargeBuffered => "large-buffered",
         }
     }
 }
@@ -113,6 +115,8 @@ impl FromStr for WorldType {
             "small" => Ok(WorldType::Small),
             "medium" => Ok(WorldType::Medium),
             "large" => Ok(WorldType::Large),
+            "large-buffered" | "large_buffered" | "buffered" | "global-buffered"
+            | "global_buffered" => Ok(WorldType::LargeBuffered),
             other => Err(format!("unsupported world: {other}")),
         }
     }
@@ -243,6 +247,7 @@ impl WorldType {
             Self::Small => super::small::groupby_agg(records, agg),
             Self::Medium => super::medium::groupby_agg(records, agg),
             Self::Large => super::large::groupby_agg(records, agg),
+            Self::LargeBuffered => super::large::buffered_groupby_agg(records, agg),
         }
     }
 
@@ -270,6 +275,7 @@ impl WorldType {
             Self::Small => super::small::groupby_agg_timed(records, agg),
             Self::Medium => super::medium::groupby_agg_timed(records, agg),
             Self::Large => super::large::groupby_agg_timed(records, agg),
+            Self::LargeBuffered => super::large::buffered_groupby_agg_timed(records, agg),
         }
     }
 }

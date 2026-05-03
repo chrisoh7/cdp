@@ -23,13 +23,17 @@ struct Args {
     #[arg(short = 'a', long, default_value = "sum")]
     agg: String,
 
-    /// World type (Medium, Large, or All)
+    /// World type (Medium, Large, LargeBuffered, or All)
     #[arg(short = 'w', long, default_value = "Medium")]
     world: String,
 }
 
 fn all_worlds() -> Vec<WorldType> {
-    vec![WorldType::Medium, WorldType::Large]
+    vec![
+        WorldType::Medium,
+        WorldType::Large,
+        WorldType::LargeBuffered,
+    ]
 }
 
 fn parse_world(name: &str) -> Result<Vec<WorldType>> {
@@ -39,10 +43,13 @@ fn parse_world(name: &str) -> Result<Vec<WorldType>> {
         match name.parse::<WorldType>() {
             Ok(WorldType::Medium) => Ok(vec![WorldType::Medium]),
             Ok(WorldType::Large) => Ok(vec![WorldType::Large]),
+            Ok(WorldType::LargeBuffered) => Ok(vec![WorldType::LargeBuffered]),
             Ok(WorldType::Small) => {
                 bail!("world 'small' is a hardware placeholder and is not runnable in this software baseline")
             }
-            Err(_) => bail!("unsupported world '{name}', expected medium, large, or all"),
+            Err(_) => {
+                bail!("unsupported world '{name}', expected medium, large, large-buffered, or all")
+            }
         }
     }
 }
@@ -52,6 +59,7 @@ fn world_label(world: &WorldType) -> &'static str {
     match world {
         WorldType::Medium => "PerThreadLocal",
         WorldType::Large => "Global",
+        WorldType::LargeBuffered => "GlobalBuffered",
         WorldType::Small => "Small",
     }
 }

@@ -10,8 +10,12 @@ const TAXI_PATH: &str = concat!(
     "/src/data/yellow_tripdata_2025-01.parquet"
 );
 
-fn all_worlds() -> [WorldType; 2] {
-    [WorldType::Medium, WorldType::Large]
+fn all_worlds() -> [WorldType; 3] {
+    [
+        WorldType::Medium,
+        WorldType::Large,
+        WorldType::LargeBuffered,
+    ]
 }
 
 fn compare_single_key_with_duckdb(

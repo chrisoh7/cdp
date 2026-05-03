@@ -37,7 +37,7 @@ struct Args {
     #[arg(long, default_value = "all")]
     query: String,
 
-    /// World to run: small, medium, large, or all
+    /// World to run: small, medium, large, large-buffered, or all
     #[arg(long, default_value = "all")]
     world: String,
 
@@ -74,7 +74,11 @@ fn main() -> Result<()> {
 
 fn parse_worlds(input: &str) -> Result<Vec<WorldType>> {
     if input.eq_ignore_ascii_case("all") {
-        Ok(vec![WorldType::Medium, WorldType::Large])
+        Ok(vec![
+            WorldType::Medium,
+            WorldType::Large,
+            WorldType::LargeBuffered,
+        ])
     } else {
         let world = input
             .parse::<WorldType>()
@@ -83,7 +87,7 @@ fn parse_worlds(input: &str) -> Result<Vec<WorldType>> {
             WorldType::Small => Err(anyhow::anyhow!(
                 "world 'small' is a hardware placeholder and is not runnable in this software baseline"
             )),
-            WorldType::Medium | WorldType::Large => Ok(vec![world]),
+            WorldType::Medium | WorldType::Large | WorldType::LargeBuffered => Ok(vec![world]),
         }
     }
 }
