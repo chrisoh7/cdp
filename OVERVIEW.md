@@ -94,6 +94,41 @@ Supported transform helpers:
 - `to_yyyymmdd_from_epoch_micros`
 - `round_from_f64_bits`
 
+## Dataset Provenance
+
+The repository mixes original public datasets, ClickHouse-hosted example material, and locally derived subsets. That distinction matters for reproducibility.
+
+### NYC Taxi
+
+- Local file: `src/data/yellow_tripdata_2025-01.parquet`
+- Original source: NYC Taxi & Limousine Commission trip record data
+- Source page: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+- ClickHouse also publishes NYC Taxi examples and mirrors in its docs and public dataset ecosystem:
+- Example reference: https://clickhouse.com/jp/integrations/gcs
+- Public dataset index: https://datasets.clickhouse.com/index.html
+
+### Environmental Sensors
+
+- Local file: `src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet`
+- This file is a local subset used for benchmarking convenience
+- If regenerated, the repo should record the exact upstream dataset URL and the subsetting method used
+
+### Brown Logs / mgBench
+
+- Local file: `src/data/subsets/brown_mgbench1_subset_200k.parquet`
+- This file is also a local subset used for benchmarking convenience
+- If regenerated, the repo should record the exact upstream dataset URL and the subsetting method used
+
+### Reproducibility Note
+
+When updating or replacing any dataset in this repo, prefer recording:
+
+- original upstream source
+- ClickHouse mirror or example URL, if used
+- local filename
+- any filtering or sampling applied
+- final row count and file size
+
 ## Entry Points
 
 ### Query Runner
