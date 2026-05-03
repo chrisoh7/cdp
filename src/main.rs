@@ -1,117 +1,145 @@
-mod worlds;
-use mimalloc::MiMalloc;
-use std::cmp::Ordering;
-use std::time::Instant;
-use worlds::types::{Aggregation, WorldType};
-use worlds::util::{
-    read_parquet_single_column, read_parquet_string_key_to_records,
-    read_parquet_to_records, read_parquet_to_records_three_keys_with_transforms,
+use anyhow::{bail, Result};
+use cdp::worlds::types::{Aggregation, Record, TimedResult, WorldType};
+use cdp::worlds::util::{
+    read_parquet_single_column, read_parquet_string_key_to_records, read_parquet_to_records,
+    read_parquet_to_records_three_keys_with_transforms,
     read_parquet_to_records_two_keys_with_transforms, read_sensors_yyyymmdd_count,
     round_from_f64_bits, to_year_from_epoch_micros,
 };
+use clap::Parser;
+use mimalloc::MiMalloc;
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::time::Instant;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-fn main() -> parquet::errors::Result<()> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/data/yellow_tripdata_2025-01.parquet");
+const TAXI_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/data/yellow_tripdata_2025-01.parquet"
+);
+const SENSORS_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet"
+);
+const BROWN_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/data/subsets/brown_mgbench1_subset_200k.parquet"
+);
 
-    println!("{:-<60}", "");
-    println!("NYC TAXI QUERIES  (Medium = per-thread local maps + parallel tree-merge)");
-    println!("                  (Large  = single global concurrent hashmap)");
-    println!("{:-<60}", "");
+#[derive(Parser, Debug)]
+#[command(name = "cdp")]
+#[command(about = "Run CDP baseline queries against bundled Parquet datasets")]
+struct Args {
+    /// Query to run: q1, q2, q3, q4, q5, q6, or all
+    #[arg(long, default_value = "all")]
+    query: String,
 
-    // ── Q1: SELECT passenger_count, count(*) ─────────────────────────────────
-    let t = Instant::now();
-    let q1_records = read_parquet_single_column(path, "passenger_count")?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
+    /// World to run: small, medium, large, or all
+    #[arg(long, default_value = "all")]
+    world: String,
 
-    let t = Instant::now();
-    let result_q1_medium = WorldType::Medium.groupby_agg(&q1_records, Aggregation::Count);
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
+    /// Number of rows to print from each result set
+    #[arg(long, default_value_t = 10)]
+    limit: usize,
+}
 
-    let t = Instant::now();
-    let result_q1_large = WorldType::Large.groupby_agg(&q1_records, Aggregation::Count);
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
+fn main() -> Result<()> {
+    let args = Args::parse();
+    let worlds = parse_worlds(&args.world)?;
+    let limit = args.limit.max(1);
 
-    println!(
-        "Q1 count(*) by passenger_count\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}]",
-        q1_records.len()
+    match args.query.to_lowercase().as_str() {
+        "q1" => run_q1(&worlds, limit)?,
+        "q2" => run_q2(&worlds, limit)?,
+        "q3" => run_q3(&worlds, limit)?,
+        "q4" => run_q4(&worlds, limit)?,
+        "q5" => run_q5(&worlds, limit)?,
+        "q6" => run_q6(&worlds, limit)?,
+        "all" => {
+            run_q1(&worlds, limit)?;
+            run_q2(&worlds, limit)?;
+            run_q3(&worlds, limit)?;
+            run_q4(&worlds, limit)?;
+            run_q5(&worlds, limit)?;
+            run_q6(&worlds, limit)?;
+        }
+        other => bail!("unsupported query '{other}', expected q1..q6 or all"),
+    }
+
+    Ok(())
+}
+
+fn parse_worlds(input: &str) -> Result<Vec<WorldType>> {
+    if input.eq_ignore_ascii_case("all") {
+        Ok(vec![WorldType::Medium, WorldType::Large])
+    } else {
+        let world = input
+            .parse::<WorldType>()
+            .map_err(|err| anyhow::anyhow!(err))?;
+        match world {
+            WorldType::Small => Err(anyhow::anyhow!(
+                "world 'small' is a hardware placeholder and is not runnable in this software baseline"
+            )),
+            WorldType::Medium | WorldType::Large => Ok(vec![world]),
+        }
+    }
+}
+
+fn run_q1(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_parquet_single_column(TAXI_PATH, "passenger_count")?;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+    print_section(
+        "Q1 count(*) by passenger_count",
+        records.len(),
+        load_ms,
+        run_worlds(worlds, &records, Aggregation::Count, limit),
     );
-    println!("  Medium: {:?}", result_q1_medium);
-    println!("  Large:  {:?}", result_q1_large);
+    Ok(())
+}
 
-    // ── Q2: SELECT passenger_count, avg(total_amount) ─────────────────────────
-    let t = Instant::now();
-    let q2_records = read_parquet_to_records(path, "passenger_count", "total_amount")?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
+fn run_q2(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_parquet_to_records(TAXI_PATH, "passenger_count", "total_amount")?;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
 
-    let t = Instant::now();
-    let result_q2_medium = WorldType::Medium.groupby_agg(&q2_records, Aggregation::Avg);
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q2_large = WorldType::Large.groupby_agg(&q2_records, Aggregation::Avg);
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
-
-    println!(
-        "\nQ2 avg(total_amount) by passenger_count\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}]",
-        q2_records.len()
+    print_section(
+        "Q2 avg(total_amount) by passenger_count",
+        records.len(),
+        load_ms,
+        run_worlds(worlds, &records, Aggregation::Avg, limit),
     );
-    println!("  Medium: {:?}", result_q2_medium);
-    println!("  Large:  {:?}", result_q2_large);
+    Ok(())
+}
 
-    // ── Q3: SELECT passenger_count, toYear(pickup_datetime), count(*) ─────────
-    let t = Instant::now();
-    let q3_records = read_parquet_to_records_two_keys_with_transforms(
-        path,
+fn run_q3(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_parquet_to_records_two_keys_with_transforms(
+        TAXI_PATH,
         "passenger_count",
         "tpep_pickup_datetime",
         "total_amount",
         &[None, Some(Box::new(to_year_from_epoch_micros))],
     )?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
 
-    let t = Instant::now();
-    let result_q3_medium = WorldType::Medium.groupby_agg(&q3_records, Aggregation::Count);
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q3_large = WorldType::Large.groupby_agg(&q3_records, Aggregation::Count);
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
-
-    println!(
-        "\nQ3 count(*) by (passenger_count, year)\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}]",
-        q3_records.len()
+    print_section(
+        "Q3 count(*) by (passenger_count, year)",
+        records.len(),
+        load_ms,
+        run_worlds(worlds, &records, Aggregation::Count, limit),
     );
-    println!("  Medium: {:?}", result_q3_medium);
-    println!("  Large:  {:?}", result_q3_large);
+    Ok(())
+}
 
-    // Q3 inverted: key order swapped, avg aggregation
-    let t = Instant::now();
-    let q3_inv_records = read_parquet_to_records_two_keys_with_transforms(
-        path,
-        "tpep_pickup_datetime",
-        "passenger_count",
-        "total_amount",
-        &[Some(Box::new(to_year_from_epoch_micros)), None],
-    )?;
-    let t_load_inv = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q3_inv = WorldType::Large.groupby_agg(&q3_inv_records, Aggregation::Avg);
-    let t_large_inv = t.elapsed().as_secs_f64() * 1000.0;
-
-    println!(
-        "\nQ3 (swapped) avg(total_amount) by (year, passenger_count)\n  load={t_load_inv:.1}ms  large={t_large_inv:.1}ms  [n={}]",
-        q3_inv_records.len()
-    );
-    println!("  Large: {:?}", result_q3_inv);
-
-    // ── Q4: three-key count, ordered by year then count desc ──────────────────
-    let t = Instant::now();
-    let q4_records = read_parquet_to_records_three_keys_with_transforms(
-        path,
+fn run_q4(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_parquet_to_records_three_keys_with_transforms(
+        TAXI_PATH,
         "passenger_count",
         "tpep_pickup_datetime",
         "trip_distance",
@@ -122,92 +150,123 @@ fn main() -> parquet::errors::Result<()> {
             Some(Box::new(round_from_f64_bits)),
         ],
     )?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
 
-    let t = Instant::now();
-    let mut result_q4_medium: Vec<((u64, u64, u64), f64)> =
-        WorldType::Medium.groupby_agg(&q4_records, Aggregation::Count).into_iter().collect();
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
+    println!("\nQ4 count(*) by (passenger_count, year, round(distance))");
+    println!("  load={load_ms:.1}ms records={}", records.len());
 
-    let t = Instant::now();
-    let mut result_q4_large: Vec<((u64, u64, u64), f64)> =
-        WorldType::Large.groupby_agg(&q4_records, Aggregation::Count).into_iter().collect();
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
-
-    let sort_q4 = |v: &mut Vec<((u64, u64, u64), f64)>| {
-        v.sort_by(|a, b| {
-            let year_cmp = a.0 .1.cmp(&b.0 .1);
-            if year_cmp != Ordering::Equal { return year_cmp; }
-            b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
-        });
-    };
-    sort_q4(&mut result_q4_medium);
-    sort_q4(&mut result_q4_large);
-
-    println!(
-        "\nQ4 count(*) by (passenger_count, year, round(distance)) ORDER BY year, count DESC\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}, {} groups]",
-        q4_records.len(), result_q4_medium.len()
-    );
-    // Print only the top 10 rows to keep output clean
-    println!("  Medium top-10: {:?}", &result_q4_medium[..result_q4_medium.len().min(10)]);
-    println!("  Large  top-10: {:?}", &result_q4_large[..result_q4_large.len().min(10)]);
-
-    // ── Q5: sensors count by YYYYMMDD ─────────────────────────────────────────
-    println!("\n{:-<60}", "");
-    println!("SENSORS / BROWN QUERIES");
-    println!("{:-<60}", "");
-
-    let sensors_path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/data/subsets/environmental_sensors_2019_06_subset_200k.parquet"
-    );
-
-    let t = Instant::now();
-    let sensor_records = read_sensors_yyyymmdd_count(sensors_path, "timestamp")?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q5_medium = WorldType::Medium.groupby_agg(&sensor_records, Aggregation::Count);
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q5_large = WorldType::Large.groupby_agg(&sensor_records, Aggregation::Count);
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
-
-    let mut q5_sorted: Vec<(u64, f64)> = result_q5_medium.into_iter().collect();
-    q5_sorted.sort_by_key(|(day, _)| *day);
-
-    println!(
-        "\nQ5 sensors count(*) by toYYYYMMDD(timestamp)\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}]",
-        sensor_records.len()
-    );
-    println!("  By day: {:?}", q5_sorted);
-    let _ = result_q5_large;
-
-    // ── Q6: brown avg(cpu_user) by machine_name ───────────────────────────────
-    let brown_path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/data/subsets/brown_mgbench1_subset_200k.parquet"
-    );
-
-    let t = Instant::now();
-    let brown_records = read_parquet_string_key_to_records(brown_path, "machine_name", "cpu_user")?;
-    let t_load = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q6_medium = WorldType::Medium.groupby_agg(&brown_records, Aggregation::Avg);
-    let t_med = t.elapsed().as_secs_f64() * 1000.0;
-
-    let t = Instant::now();
-    let result_q6_large = WorldType::Large.groupby_agg(&brown_records, Aggregation::Avg);
-    let t_large = t.elapsed().as_secs_f64() * 1000.0;
-
-    println!(
-        "\nQ6 brown avg(COALESCE(cpu_user,0)) by machine_name (keys=FNV hashes)\n  load={t_load:.1}ms  medium={t_med:.1}ms  large={t_large:.1}ms  [n={}]",
-        brown_records.len()
-    );
-    println!("  Medium: {:?}", result_q6_medium);
-    println!("  Large:  {:?}", result_q6_large);
+    for world in worlds {
+        let started = Instant::now();
+        let timing = world.groupby_agg_timed(&records, Aggregation::Count);
+        let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let group_count = timing.result.len();
+        let sample = format_q4_sample(timing.result, limit);
+        println!(
+            "  {:<6} update={:.1}ms finalize={:.1}ms total={total_ms:.1}ms groups={} sample={sample}",
+            world,
+            timing.t_update * 1000.0,
+            timing.t_finalize * 1000.0,
+            group_count,
+        );
+    }
 
     Ok(())
+}
+
+fn run_q5(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_sensors_yyyymmdd_count(SENSORS_PATH, "timestamp")?;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+    print_section(
+        "Q5 sensors count(*) by toYYYYMMDD(timestamp)",
+        records.len(),
+        load_ms,
+        run_worlds(worlds, &records, Aggregation::Count, limit),
+    );
+    Ok(())
+}
+
+fn run_q6(worlds: &[WorldType], limit: usize) -> Result<()> {
+    let started = Instant::now();
+    let records = read_parquet_string_key_to_records(BROWN_PATH, "machine_name", "cpu_user")?;
+    let load_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+    print_section(
+        "Q6 avg(COALESCE(cpu_user, 0.0)) by machine_name_hash",
+        records.len(),
+        load_ms,
+        run_worlds(worlds, &records, Aggregation::Avg, limit),
+    );
+    Ok(())
+}
+
+fn run_worlds<K>(
+    worlds: &[WorldType],
+    records: &[Record<K>],
+    agg: Aggregation,
+    limit: usize,
+) -> Vec<RunSummary>
+where
+    K: Clone + Debug + Ord + Send + Sync + std::hash::Hash + Eq,
+{
+    worlds
+        .iter()
+        .copied()
+        .map(|world| {
+            let started = Instant::now();
+            let timing: TimedResult<K> = world.groupby_agg_timed(records, agg);
+            let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let group_count = timing.result.len();
+            RunSummary {
+                world,
+                update_ms: timing.t_update * 1000.0,
+                finalize_ms: timing.t_finalize * 1000.0,
+                total_ms,
+                group_count,
+                sample: format_sample(timing.result, limit),
+            }
+        })
+        .collect()
+}
+
+fn print_section(title: &str, rows: usize, load_ms: f64, runs: Vec<RunSummary>) {
+    println!("\n{title}");
+    println!("  load={load_ms:.1}ms records={rows}");
+    for run in runs {
+        println!(
+            "  {:<6} update={:.1}ms finalize={:.1}ms total={:.1}ms groups={} sample={}",
+            run.world, run.update_ms, run.finalize_ms, run.total_ms, run.group_count, run.sample
+        );
+    }
+}
+
+fn format_sample<K>(map: HashMap<K, f64>, limit: usize) -> String
+where
+    K: Ord + Debug,
+{
+    let mut rows: Vec<(K, f64)> = map.into_iter().collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    format!("{:?}", &rows[..rows.len().min(limit)])
+}
+
+fn format_q4_sample(map: HashMap<(u64, u64, u64), f64>, limit: usize) -> String {
+    let mut rows: Vec<((u64, u64, u64), f64)> = map.into_iter().collect();
+    rows.sort_by(|a, b| {
+        let year_cmp = a.0 .1.cmp(&b.0 .1);
+        if year_cmp != Ordering::Equal {
+            return year_cmp;
+        }
+        b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
+    });
+    format!("{:?}", &rows[..rows.len().min(limit)])
+}
+
+struct RunSummary {
+    world: WorldType,
+    update_ms: f64,
+    finalize_ms: f64,
+    total_ms: f64,
+    group_count: usize,
+    sample: String,
 }

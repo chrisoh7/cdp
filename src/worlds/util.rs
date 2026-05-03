@@ -72,7 +72,10 @@ pub fn read_parquet_to_records(
     let val_proj = positions[1];
 
     let mask = ProjectionMask::roots(builder.parquet_schema(), proj);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<u64>> = Vec::with_capacity(total_rows);
 
@@ -80,10 +83,16 @@ pub fn read_parquet_to_records(
         let batch = batch_result?;
 
         let normalized_keys = normalize_column(batch.column(key_proj), &DataType::Int64)?;
-        let key_array = normalized_keys.as_any().downcast_ref::<Int64Array>().unwrap();
+        let key_array = normalized_keys
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
 
         let normalized_vals = normalize_column(batch.column(val_proj), &DataType::Float64)?;
-        let val_array = normalized_vals.as_any().downcast_ref::<Float64Array>().unwrap();
+        let val_array = normalized_vals
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
 
         for i in 0..batch.num_rows() {
             if key_array.is_null(i) || val_array.is_null(i) {
@@ -112,14 +121,20 @@ pub fn read_parquet_single_column(
 
     let key_orig = file_schema.index_of(key_str).unwrap();
     let mask = ProjectionMask::roots(builder.parquet_schema(), [key_orig]);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<u64>> = Vec::with_capacity(total_rows);
 
     while let Some(batch_result) = reader.next() {
         let batch = batch_result?;
         let normalized_keys = normalize_column(batch.column(0), &DataType::Int64)?;
-        let key_array = normalized_keys.as_any().downcast_ref::<Int64Array>().unwrap();
+        let key_array = normalized_keys
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
 
         for i in 0..batch.num_rows() {
             if key_array.is_null(i) {
@@ -258,7 +273,10 @@ pub fn read_parquet_to_records_two_keys_with_transforms(
     let (key1_proj, key2_proj, val_proj) = (positions[0], positions[1], positions[2]);
 
     let mask = ProjectionMask::roots(builder.parquet_schema(), proj);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<(u64, u64)>> = Vec::with_capacity(total_rows);
 
@@ -280,10 +298,17 @@ pub fn read_parquet_to_records_two_keys_with_transforms(
             let mut k2 = key2_data.value_u64(i);
             let v = val_array.value(i);
 
-            if let Some(f) = &key_transforms[0] { k1 = f(k1); }
-            if let Some(f) = &key_transforms[1] { k2 = f(k2); }
+            if let Some(f) = &key_transforms[0] {
+                k1 = f(k1);
+            }
+            if let Some(f) = &key_transforms[1] {
+                k2 = f(k2);
+            }
 
-            records.push(Record { key: (k1, k2), value: v });
+            records.push(Record {
+                key: (k1, k2),
+                value: v,
+            });
         }
     }
 
@@ -323,7 +348,10 @@ pub fn read_parquet_to_records_three_keys_with_transforms(
         (positions[0], positions[1], positions[2], positions[3]);
 
     let mask = ProjectionMask::roots(builder.parquet_schema(), proj);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<(u64, u64, u64)>> = Vec::with_capacity(total_rows);
 
@@ -351,11 +379,20 @@ pub fn read_parquet_to_records_three_keys_with_transforms(
             let mut k3 = key3_data.value_u64(i);
             let v = val_array.value(i);
 
-            if let Some(f) = &key_transforms[0] { k1 = f(k1); }
-            if let Some(f) = &key_transforms[1] { k2 = f(k2); }
-            if let Some(f) = &key_transforms[2] { k3 = f(k3); }
+            if let Some(f) = &key_transforms[0] {
+                k1 = f(k1);
+            }
+            if let Some(f) = &key_transforms[1] {
+                k2 = f(k2);
+            }
+            if let Some(f) = &key_transforms[2] {
+                k3 = f(k3);
+            }
 
-            records.push(Record { key: (k1, k2, k3), value: v });
+            records.push(Record {
+                key: (k1, k2, k3),
+                value: v,
+            });
         }
     }
 
@@ -406,7 +443,10 @@ pub fn read_sensors_yyyymmdd_count(
     let ts_dtype = file_schema.field(ts_orig).data_type().clone();
 
     let mask = ProjectionMask::roots(builder.parquet_schema(), [ts_orig]);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<u64>> = Vec::with_capacity(total_rows);
 
@@ -418,18 +458,28 @@ pub fn read_sensors_yyyymmdd_count(
             let norm = normalize_column(ts_col, &DataType::Utf8)?;
             let arr = norm.as_any().downcast_ref::<StringArray>().unwrap();
             for i in 0..batch.num_rows() {
-                if arr.is_null(i) { continue; }
+                if arr.is_null(i) {
+                    continue;
+                }
                 let ndt = NaiveDateTime::parse_from_str(arr.value(i), "%Y-%m-%dT%H:%M:%S")
                     .expect("invalid datetime string");
                 let day = to_yyyymmdd_from_epoch_micros(ndt.and_utc().timestamp_micros() as u64);
-                records.push(Record { key: day, value: 1.0 });
+                records.push(Record {
+                    key: day,
+                    value: 1.0,
+                });
             }
         } else {
             let key_data = KeyColumn::from_field(ts_col, &ts_dtype)?;
             for i in 0..batch.num_rows() {
-                if key_data.is_null(i) { continue; }
+                if key_data.is_null(i) {
+                    continue;
+                }
                 let day = to_yyyymmdd_from_epoch_micros(key_data.value_u64(i));
-                records.push(Record { key: day, value: 1.0 });
+                records.push(Record {
+                    key: day,
+                    value: 1.0,
+                });
             }
         }
     }
@@ -457,7 +507,10 @@ pub fn read_parquet_string_key_to_records(
     let (key_proj, val_proj) = (positions[0], positions[1]);
 
     let mask = ProjectionMask::roots(builder.parquet_schema(), proj);
-    let mut reader = builder.with_projection(mask).with_batch_size(BATCH_SIZE).build()?;
+    let mut reader = builder
+        .with_projection(mask)
+        .with_batch_size(BATCH_SIZE)
+        .build()?;
 
     let mut records: Vec<Record<u64>> = Vec::with_capacity(total_rows);
 
@@ -471,11 +524,20 @@ pub fn read_parquet_string_key_to_records(
         let val_arr = val_norm.as_any().downcast_ref::<Float64Array>().unwrap();
 
         for i in 0..batch.num_rows() {
-            if key_arr.is_null(i) { continue; }
+            if key_arr.is_null(i) {
+                continue;
+            }
             let mut h = FnvHasher::default();
             key_arr.value(i).hash(&mut h);
-            let val = if val_arr.is_null(i) { 0.0 } else { val_arr.value(i) };
-            records.push(Record { key: h.finish(), value: val });
+            let val = if val_arr.is_null(i) {
+                0.0
+            } else {
+                val_arr.value(i)
+            };
+            records.push(Record {
+                key: h.finish(),
+                value: val,
+            });
         }
     }
 

@@ -116,8 +116,7 @@ where
     //                  root merge thrashes L3; partition scatter keeps each
     //                  thread's working set at 1/T the size.
     let total_partial_entries: usize = partials.iter().map(|p| p.len()).sum();
-    let use_scatter = records.len() > 0
-        && total_partial_entries * 5 > records.len() * 4; // saturation > 80 %
+    let use_scatter = records.len() > 0 && total_partial_entries * 5 > records.len() * 4; // saturation > 80 %
 
     let partitions = if use_scatter {
         finalize_scatter(partials, threads)

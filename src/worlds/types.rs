@@ -35,7 +35,7 @@ pub enum AggState {
     Count(f64),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldType {
     Small,
     Medium,
@@ -85,6 +85,35 @@ impl FromStr for Aggregation {
             "avg" => Ok(Aggregation::Avg),
             "count" => Ok(Aggregation::Count),
             other => Err(format!("unsupported aggregation: {other}")),
+        }
+    }
+}
+
+impl WorldType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorldType::Small => "small",
+            WorldType::Medium => "medium",
+            WorldType::Large => "large",
+        }
+    }
+}
+
+impl fmt::Display for WorldType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for WorldType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "small" => Ok(WorldType::Small),
+            "medium" => Ok(WorldType::Medium),
+            "large" => Ok(WorldType::Large),
+            other => Err(format!("unsupported world: {other}")),
         }
     }
 }
@@ -160,8 +189,6 @@ impl WorldType {
             Aggregation::Count => read_parquet_single_column(path, key)?,
             _ => read_parquet_to_records(path, key, val)?,
         };
-        println!("Loaded {} records", records.len());
-
         Ok(self.groupby_agg(&records, agg))
     }
 
@@ -182,8 +209,6 @@ impl WorldType {
             val,
             key_transforms,
         )?;
-        println!("Loaded {} two-key records", records.len());
-
         Ok(self.groupby_agg(&records, agg))
     }
 
@@ -206,8 +231,6 @@ impl WorldType {
             val,
             key_transforms,
         )?;
-        println!("Loaded {} three-key records", records.len());
-
         Ok(self.groupby_agg(&records, agg))
     }
 
@@ -217,9 +240,9 @@ impl WorldType {
         K: Eq + Hash + Clone + Send + Sync,
     {
         match self {
+            Self::Small => super::small::groupby_agg(records, agg),
             Self::Medium => super::medium::groupby_agg(records, agg),
             Self::Large => super::large::groupby_agg(records, agg),
-            _ => unimplemented!(),
         }
     }
 
@@ -235,8 +258,6 @@ impl WorldType {
             Aggregation::Count => read_parquet_single_column(path, key)?,
             _ => read_parquet_to_records(path, key, val)?,
         };
-        println!("Loaded {} records", records.len());
-
         Ok(self.groupby_agg_timed(&records, agg))
     }
 
@@ -246,9 +267,9 @@ impl WorldType {
         K: Eq + Hash + Clone + Send + Sync,
     {
         match self {
+            Self::Small => super::small::groupby_agg_timed(records, agg),
             Self::Medium => super::medium::groupby_agg_timed(records, agg),
             Self::Large => super::large::groupby_agg_timed(records, agg),
-            _ => unimplemented!(),
         }
     }
 }

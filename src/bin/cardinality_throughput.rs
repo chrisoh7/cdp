@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Parser;
 use rand::distributions::{Distribution, Uniform};
 use rand::thread_rng;
@@ -23,25 +23,26 @@ struct Args {
     #[arg(short = 'a', long, default_value = "sum")]
     agg: String,
 
-    /// World type (Small, Medium, Large, or All)
+    /// World type (Medium, Large, or All)
     #[arg(short = 'w', long, default_value = "Medium")]
     world: String,
 }
 
 fn all_worlds() -> Vec<WorldType> {
-    // Default: Medium (PerThreadLocal) and Large (Global)
     vec![WorldType::Medium, WorldType::Large]
 }
 
-fn parse_world(name: &str) -> Vec<WorldType> {
-    match name.to_lowercase().as_str() {
-        "small" => vec![WorldType::Small],
-        "medium" => vec![WorldType::Medium],
-        "large" => vec![WorldType::Large],
-        "all" => all_worlds(),
-        _ => {
-            eprintln!("⚠️ Unknown world type '{}', defaulting to Medium", name);
-            vec![WorldType::Medium]
+fn parse_world(name: &str) -> Result<Vec<WorldType>> {
+    if name.eq_ignore_ascii_case("all") {
+        Ok(all_worlds())
+    } else {
+        match name.parse::<WorldType>() {
+            Ok(WorldType::Medium) => Ok(vec![WorldType::Medium]),
+            Ok(WorldType::Large) => Ok(vec![WorldType::Large]),
+            Ok(WorldType::Small) => {
+                bail!("world 'small' is a hardware placeholder and is not runnable in this software baseline")
+            }
+            Err(_) => bail!("unsupported world '{name}', expected medium, large, or all"),
         }
     }
 }
@@ -51,7 +52,7 @@ fn world_label(world: &WorldType) -> &'static str {
     match world {
         WorldType::Medium => "PerThreadLocal",
         WorldType::Large => "Global",
-        _ => "Unknown",
+        WorldType::Small => "Small",
     }
 }
 
@@ -63,7 +64,7 @@ fn main() -> Result<()> {
         .agg
         .parse()
         .unwrap_or_else(|e| panic!("invalid aggregation '{}': {}", args.agg, e));
-    let worlds = parse_world(&args.world);
+    let worlds = parse_world(&args.world)?;
 
     let mut rng = thread_rng();
 
@@ -72,13 +73,13 @@ fn main() -> Result<()> {
 
     for world in worlds {
         for power in 1..=max_pow {
-            let card = 10_i32.pow(power);
-            let dist = Uniform::new(0, card);
+            let card = 10_u64.pow(power);
+            let dist = Uniform::new(0_u64, card);
 
             // Generate random records with u64 key
             let records: Vec<Record<u64>> = (0..num_records)
                 .map(|_| Record {
-                    key: dist.sample(&mut rng) as u64,
+                    key: dist.sample(&mut rng),
                     value: 1.0,
                 })
                 .collect();
@@ -94,7 +95,7 @@ fn main() -> Result<()> {
             println!(
                 "{},{},{:.3},{:.6},{:.6}",
                 world_label(&world),
-                card,
+                card, // u64, prints as integer
                 throughput,
                 timing.t_update,
                 timing.t_finalize
